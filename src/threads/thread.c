@@ -21,7 +21,8 @@
 #define THREAD_MAGIC 0xcd6abf4b
 
 /* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
+   that are ready to run but not actually running, in order of
+   priority. */
 static struct list ready_list;
 
 /* List of all processes.  Processes are added to this list
@@ -70,6 +71,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static void ready_by_priority( struct thread *t );
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -246,8 +248,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+  ready_by_priority( t );
+  if( t->priority > thread_current()->priority 
+   && thread_current() != idle_thread)
+	thread_yield();
   intr_set_level (old_level);
 }
 
@@ -317,7 +322,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    ready_by_priority( cur );
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -345,6 +350,9 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  
+  if( list_entry( list_begin( &ready_list ), struct thread, elem )->priority > new_priority )
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -581,6 +589,33 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+/* Adds a thread to the ready_list in order of priority.   */
+static void
+ready_by_priority( struct thread *t )
+{
+  const struct list_elem * cur = list_begin( &ready_list );
+  
+  if( list_empty(&ready_list) 
+   || t->priority > list_entry( cur, struct thread, elem )->priority )
+  {
+	list_push_front( &ready_list, &t->elem );
+	return;
+  }
+  
+  while( cur != list_end( &ready_list ) )
+  {
+    if( list_entry( cur, struct thread, elem )->priority > t->priority 
+	 && t->priority > list_entry( cur->next, struct thread, elem )->priority )
+	{
+      list_insert( cur->next, &t->elem );
+	  return;
+	}
+	cur = cur->next;
+  }
+  
+  list_push_back( &ready_list, &t->elem );
 }
 
 /* Offset of `stack' member within `struct thread'.
