@@ -212,6 +212,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  thread_yield_to_higher_priority();
 
   return tid;
 }
@@ -251,9 +252,6 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   t->status = THREAD_READY;
   list_insert_ordered( &ready_list, &t->elem, value_greater, NULL );  
-  if( t->priority > thread_current()->priority 
-   && thread_current() != idle_thread)
-	thread_yield();
   intr_set_level (old_level);
 }
 
@@ -350,9 +348,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  int cur_priority = thread_current()->priority;
   thread_current ()->priority = new_priority;
   
-  if( list_entry( list_begin( &ready_list ), struct thread, elem )->priority > new_priority )
+  if( cur_priority > new_priority )
     thread_yield();
 }
 
@@ -553,6 +552,26 @@ thread_schedule_tail (struct thread *prev)
       ASSERT (prev != cur);
       palloc_free_page (prev);
     }
+}
+
+/* If the ready list contains a thread with a higher
+   priority, yields to it. */
+void
+thread_yield_to_higher_priority( void )
+{
+  enum intr_level old_level = intr_disable();
+  if (!list_empty( &ready_list ) )
+    {
+	  if( list_entry( list_front( &ready_list ), struct thread, elem)->priority 
+	    > thread_current()->priority )
+	  {
+	    if( intr_context() )
+	      intr_yield_on_return();
+        else
+	      thread_yield();
+	  }
+	}
+  intr_set_level( old_level );
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and

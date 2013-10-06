@@ -34,6 +34,8 @@
 
 static bool value_greater (const struct list_elem *, const struct list_elem *,
                         void *);
+static bool sema_less (const struct list_elem *, const struct list_elem *,
+                        void *);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -121,6 +123,7 @@ sema_up (struct semaphore *sema)
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   sema->value++;
+  thread_yield_to_higher_priority();
   intr_set_level (old_level);
 }
 
@@ -299,8 +302,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered( &cond->waiters, &waiter.elem, 
-		value_greater, NULL );
+  list_push_back( &cond->waiters, &waiter.elem );
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -316,14 +318,18 @@ cond_wait (struct condition *cond, struct lock *lock)
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) 
 {
+  struct list_elem *max;
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  if (!list_empty (&cond->waiters))
+  {
+    max = list_max( &cond->waiters, sema_less, NULL );
+    sema_up( &list_entry( max, struct semaphore_elem, elem )->semaphore );
+	list_remove( max );
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -352,4 +358,26 @@ value_greater (const struct list_elem *a_, const struct list_elem *b_,
   const struct thread *b = list_entry (b_, struct thread, elem);
   
   return a->priority > b->priority;
+}
+
+/* Returns true if A contains a value less than value B,
+   false otherwise. */
+static bool
+sema_less( const struct list_elem *a_, const struct list_elem *b_,
+			void *aux UNUSED )
+{
+  const struct semaphore_elem *a = list_entry( a_, struct semaphore_elem, 
+			elem );
+  const struct semaphore_elem *b = list_entry( b_, struct semaphore_elem,
+			elem );
+  
+  const struct semaphore *s1 = &a->semaphore;
+  const struct semaphore *s2 = &b->semaphore;
+  
+  const struct thread *t1 = list_entry( list_front( &s1->waiters ),
+			struct thread, elem );
+  const struct thread *t2 = list_entry( list_front( &s2->waiters ),
+			struct thread, elem );
+  
+  return t1->priority < t2->priority;
 }
