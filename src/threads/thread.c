@@ -480,6 +480,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->donated_priority = PRI_MIN;
   t->magic = THREAD_MAGIC;
+  list_init( &t->locks_held );
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -507,7 +508,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return _extract_thread( list_pop_front (&ready_list) );
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -564,7 +565,7 @@ thread_yield_to_higher_priority( void )
   enum intr_level old_level = intr_disable();
   if (!list_empty( &ready_list ) )
     {
-	  if( list_entry( list_front( &ready_list ), struct thread, elem)->priority 
+	  if( _extract_thread( list_front( &ready_list ) )->priority 
 	    > thread_current()->priority )
 	  {
 	    if( intr_context() )
@@ -632,8 +633,8 @@ static bool
 value_greater (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
 {
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
+  const struct thread *a = _extract_thread( a_ );
+  const struct thread *b = _extract_thread( b_ );
 
   int p1 = a->donated_priority > a->priority ? a->donated_priority : a->priority;
   int p2 = b->donated_priority > b->priority ? b->donated_priority : b->priority;

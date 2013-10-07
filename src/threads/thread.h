@@ -5,6 +5,9 @@
 #include <list.h>
 #include <stdint.h>
 
+#define _extract_thread( x ) \
+		( list_entry( x, struct thread, elem ) )
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -103,6 +106,8 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+	
+	struct list locks_held;				/* List of locks held by this thread. */
   };
 
 

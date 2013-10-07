@@ -36,6 +36,8 @@ static bool value_greater (const struct list_elem *, const struct list_elem *,
                         void *);
 static bool sema_less (const struct list_elem *, const struct list_elem *,
                         void *);
+static bool lock_less (const struct list_elem *, const struct list_elem *,
+                        void *);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -120,8 +122,7 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+    thread_unblock( _extract_thread( list_pop_front (&sema->waiters) ));
   sema->value++;
   thread_yield_to_higher_priority();
   intr_set_level (old_level);
@@ -202,14 +203,21 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
+  
+  enum intr_level old_level;
+  old_level = intr_disable();
+  
   if( !sema_try_down( &lock->semaphore ) )
   {
     lock->holder->donated_priority = thread_get_priority();
 	thread_resort_ready_list();
 	sema_down (&lock->semaphore);
   }
+  
   lock->holder = thread_current ();
+  list_push_front( &lock->holder->locks_held, &lock->elem );
+  
+  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -243,14 +251,38 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   
-  if( lock->holder->donated_priority > PRI_MIN )
-  {
-    lock->holder->donated_priority = PRI_MIN;
-	thread_resort_ready_list();
-  }
+  struct lock *max;
+  enum intr_level old_level;
   
+  old_level = intr_disable ();
+  list_remove( &lock->elem );
+  
+  /* Final lock has been released, reset donated priority to
+	 PRI_MIN and remove lock from list of held locks */
+  if( list_empty( &lock->holder->locks_held ) )
+    lock->holder->donated_priority = PRI_MIN;
+
+  /* More locks held by this thread and this thread is
+     running on a donated priority. Find the max priority
+	 in all of this thread's locks and reset donated priority.
+	 Remove this lock from this thread. */
+  else
+  {
+    max = _extract_lock( list_max( &lock->holder->locks_held, 
+		lock_less, NULL ) );
+	if( list_empty( &max->semaphore.waiters ) )
+		lock->holder->donated_priority = PRI_MIN;
+	else
+		lock->holder->donated_priority = 
+			thread_get_thread_priority( 
+			_extract_thread( list_front( &max->semaphore.waiters ) ) );
+  }
+
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+  thread_resort_ready_list();
+  
+  intr_set_level (old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -365,8 +397,8 @@ static bool
 value_greater (const struct list_elem *a_, const struct list_elem *b_,
             void *aux UNUSED) 
 {
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
+  const struct thread *a = _extract_thread( a_ );
+  const struct thread *b = _extract_thread( b_ );
 
   int p1 = a->donated_priority > a->priority ? a->donated_priority : a->priority;
   int p2 = b->donated_priority > b->priority ? b->donated_priority : b->priority;
@@ -379,18 +411,40 @@ static bool
 sema_less( const struct list_elem *a_, const struct list_elem *b_,
 			void *aux UNUSED )
 {
-  const struct semaphore_elem *a = list_entry( a_, struct semaphore_elem, 
-			elem );
-  const struct semaphore_elem *b = list_entry( b_, struct semaphore_elem,
-			elem );
+  const struct semaphore_elem *a = _extract_sema_elem( a_ );
+  const struct semaphore_elem *b = _extract_sema_elem( b_ );
+  const struct semaphore *s1 = &a->semaphore;
+  const struct semaphore *s2 = &b->semaphore;
+  const struct thread *t1 = 
+		_extract_thread( list_front( &s1->waiters ) );
+  const struct thread *t2 = 
+		_extract_thread( list_front( &s2->waiters ) );
+
+  int p1 = t1->donated_priority > t1->priority ? t1->donated_priority : t1->priority;
+  int p2 = t2->donated_priority > t2->priority ? t2->donated_priority : t2->priority;
   
+  return t1->priority < t2->priority;
+}
+
+/* Returns true if A contains a value less than value B,
+   false otherwise. */
+static bool
+lock_less( const struct list_elem *a_, const struct list_elem *b_,
+			void *aux UNUSED )
+{
+  const struct lock *a = _extract_lock( a_ );
+  const struct lock *b = _extract_lock( b_ );
   const struct semaphore *s1 = &a->semaphore;
   const struct semaphore *s2 = &b->semaphore;
   
-  const struct thread *t1 = list_entry( list_front( &s1->waiters ),
-			struct thread, elem );
-  const struct thread *t2 = list_entry( list_front( &s2->waiters ),
-			struct thread, elem );
+  if( list_empty( &s1->waiters ) 
+   || list_empty( &s2->waiters ) )
+	return list_empty( &s1->waiters );
+  
+  const struct thread *t1 = 
+		_extract_thread( list_front( &s1->waiters ) );
+  const struct thread *t2 = 
+		_extract_thread( list_front( &s2->waiters ) );
 
   int p1 = t1->donated_priority > t1->priority ? t1->donated_priority : t1->priority;
   int p2 = t2->donated_priority > t2->priority ? t2->donated_priority : t2->priority;
