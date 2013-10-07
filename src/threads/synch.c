@@ -203,7 +203,12 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
+  if( !sema_try_down( &lock->semaphore ) )
+  {
+    lock->holder->donated_priority = thread_get_priority();
+	thread_resort_ready_list();
+	sema_down (&lock->semaphore);
+  }
   lock->holder = thread_current ();
 }
 
@@ -237,7 +242,13 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  
+  if( lock->holder->donated_priority > PRI_MIN )
+  {
+    lock->holder->donated_priority = PRI_MIN;
+	thread_resort_ready_list();
+  }
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -327,8 +338,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   if (!list_empty (&cond->waiters))
   {
     max = list_max( &cond->waiters, sema_less, NULL );
-    sema_up( &list_entry( max, struct semaphore_elem, elem )->semaphore );
 	list_remove( max );
+    sema_up( &list_entry( max, struct semaphore_elem, elem )->semaphore );
   }
 }
 
@@ -356,8 +367,10 @@ value_greater (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
-  
-  return a->priority > b->priority;
+
+  int p1 = a->donated_priority > a->priority ? a->donated_priority : a->priority;
+  int p2 = b->donated_priority > b->priority ? b->donated_priority : b->priority;
+  return p1 > p2;
 }
 
 /* Returns true if A contains a value less than value B,
@@ -378,6 +391,9 @@ sema_less( const struct list_elem *a_, const struct list_elem *b_,
 			struct thread, elem );
   const struct thread *t2 = list_entry( list_front( &s2->waiters ),
 			struct thread, elem );
+
+  int p1 = t1->donated_priority > t1->priority ? t1->donated_priority : t1->priority;
+  int p2 = t2->donated_priority > t2->priority ? t2->donated_priority : t2->priority;
   
   return t1->priority < t2->priority;
 }

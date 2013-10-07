@@ -359,7 +359,8 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_current()->donated_priority > thread_current()->priority ?
+		thread_current()->donated_priority : thread_current()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -477,6 +478,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->donated_priority = PRI_MIN;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -574,6 +576,12 @@ thread_yield_to_higher_priority( void )
   intr_set_level( old_level );
 }
 
+void
+thread_resort_ready_list( void )
+{
+  list_sort( &ready_list, value_greater, NULL );
+}
+
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -619,8 +627,10 @@ value_greater (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
-  
-  return a->priority > b->priority;
+
+  int p1 = a->donated_priority > a->priority ? a->donated_priority : a->priority;
+  int p2 = b->donated_priority > b->priority ? b->donated_priority : b->priority;
+  return p1 > p2;
 }
 
 /* Offset of `stack' member within `struct thread'.
