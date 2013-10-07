@@ -94,7 +94,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 	
-	int64_t sleep_ticks;					/* Time (in ticks) when thread needs to stop sleeping */
+	int64_t sleep_ticks;				/* Time (in ticks) when thread needs to stop sleeping */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -104,6 +104,7 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -143,5 +144,6 @@ int thread_get_load_avg (void);
 
 void thread_yield_to_higher_priority( void );
 void thread_resort_ready_list( void );
+int thread_get_thread_priority( struct thread * );
 
 #endif /* threads/thread.h */

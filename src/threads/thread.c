@@ -472,7 +472,7 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
+  
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
@@ -582,6 +582,13 @@ thread_resort_ready_list( void )
   list_sort( &ready_list, value_greater, NULL );
 }
 
+int
+thread_get_thread_priority( struct thread *t )
+{
+	return t->donated_priority > t->priority ?
+			t->donated_priority : t->priority;
+}
+
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
    running to some other state.  This function finds another
@@ -630,6 +637,7 @@ value_greater (const struct list_elem *a_, const struct list_elem *b_,
 
   int p1 = a->donated_priority > a->priority ? a->donated_priority : a->priority;
   int p2 = b->donated_priority > b->priority ? b->donated_priority : b->priority;
+  
   return p1 > p2;
 }
 
