@@ -656,11 +656,8 @@ value_greater (const struct list_elem *a_, const struct list_elem *b_,
 {
   const struct thread *a = _extract_thread( a_ );
   const struct thread *b = _extract_thread( b_ );
-
-  int p1 = a->donated_priority > a->priority ? a->donated_priority : a->priority;
-  int p2 = b->donated_priority > b->priority ? b->donated_priority : b->priority;
   
-  return p1 > p2;
+  return thread_get_thread_priority( a ) > thread_get_thread_priority( b );
 }
 
 /* Offset of `stack' member within `struct thread'.
