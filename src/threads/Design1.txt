@@ -26,31 +26,53 @@ Adam Nickle <anickle@ksu.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+int64_t sleep_ticks;
+	How much longer the thread needs to sleep, in ticks, used by the timer
+		determine if the thread needs to be awoken yet.
+	Added to struct thread in thread.h.
 
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to your timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+First the call disables interupts, then checks to make sure the given value
+	of ticks is valid. It then sets the current thread's sleep_ticks to ticks,
+	blocks the thread with a call to thread_block(), and then re-enables interupts.
+	If the given value of ticks was less than zero, then the thread does not sleep.
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
+??? (This may be asking about if we implemented a wait_list instead
+	of using the all_list in thread.h)
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+In timer_sleep(), interupts are disabled to prevent a context switch to
+	another thread calling timer_sleep() that could possibly cause a reace
+	condition.
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
 
+Race conditions are avoided in timer_sleep() disabling the interupts while
+	in timer_sleep() so a context switch doesn't occur and let another
+	thread compromise any values in timer_sleep() causing a race condition.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> other designs that you considered?
 
+We chose this design due to its sleek implementation. It removes the busy
+	waiting which was occuring in timer_sleep() without causing too many
+	changes to the pre-existing code.
+We considered using a semaphore to block the thread when it needed to sleep
+	but decided this implementation is easier to understand and therefore better.
 
 
              PRIORITY SCHEDULING
@@ -62,19 +84,71 @@ Adam Nickle <anickle@ksu.edu>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+int donated_priority;
+	The priority that has been donated to this thread. Guaranteed to either
+		be greater than the original priority or equal to PRI_MIN.
+	Added to struct thread in thread.h.
+
+struct list locks_held;
+	List of locks held per thread used for priority donation
+		to make sure to donate the highest priority of waiting threads
+		to the blocking thread.
+	Added to struct thread in thread.h.
+
+??? (Need to add the lock blocker to implement nested priority donation)
+
 >> B2: Explain the data structure used to track priority donation.
 
+The list locks_held is used to track priority donation. When a thread acquires
+	a lock, that lock is added to locks_held. Then when the thread releases that
+	lock, it removes the lock from locks_held, then checks if it is holding anymore
+	locks. If it is not then the thread resets its donated_priority to a minimum value.
+	If it is still holding more locks, it finds the lock with a thread of highest
+	priority and donates that thread's priority to itself. If it finds that there are
+	no threads waiting on any of the locks the current thread is holding, it sets its
+	donated priority back to a minimum value.
 
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
+When a lock, semaphore, or condition variable is released, the thread releasing
+	the object either sets its priority back to its original priority or 
+	keeps its donated priority depending on if the object it is releasing
+	is the one that donated its priority to the current thread. Then
+	the thread resorts the read_list of threads. So once the thread is done
+	releasing the object, if a higher priority thread that was waiting on that
+	object can now run, it is guaranteed to.
+
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
+When a thread attempts to acquire a lock and it finds that another thread
+	currently has that lock, the original thread will set the lock holding
+	thread's donated_priority to the original thread's priority. Therefore
+	buffing the lock holder's priority.
+
+??? (Need to add description of nested priority donation)
+After a thread dontates its priority to the thread holding the lock it needs,
+	it checks if that lock holding thread is blocked by another thread by checking
+	the lock blocker struct in the thread. If that blocker variable shows that
+	the second thread is also being blocked by a thread holding a lock it needs,
+	the original priority dontates its priority to that thread also. The thread
+	continues doing this, looking at the next thread's blocker and donating its
+	priority if it needs to.
+
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+
+When the thread releases a lock that a higher-priority thread is waiting for,
+	the thread checks its locks_held list and sees if there are anymore locks it has.
+	If there are more, then the thread finds the one with the highest priority thread
+	waiting on it and recieves a donated priority from that thread. If it does not have
+	anymore locks that any threads are waiting for then it sets its donated_priority back
+	to a minimum value. Then the thread finishes releasing the lock and resorts the
+	read_list so that if it decreased its priority below another thread's priorty, it will
+	yield to that higher-priority thread.
 
 ---- SYNCHRONIZATION ----
 
@@ -82,10 +156,26 @@ Adam Nickle <anickle@ksu.edu>
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+In thread_set_priority(), a race condition could occur if a thread attempts to change
+	its own priority, then a context switch occurs and another thread attempts to alter
+	the threads priority. Our implementation avoids this in two ways: we do not allow 
+	another thread to directly alter a thread's priority and we set a lock variable when
+	thread_set_priority is called to prevent any race conditions from occuring.
+
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+We chose this design because we had to somehow allow a thread to look through which threads
+	were donating their priorities to the current thread, by using locks_held, and be able
+	to see which thread is holding a lock that is currently blocking a certain thread from
+	running to be able to do nested donation, by using blocker.
+We initially considered just allowing a thread to donate its priority when it tried to
+	acquire a lock and avoid having a list of locks held, but decided that that would not
+	achieve all the goals required.
+
+____DID NOT DO THIS_____________________________________________________________________________
 
 
               ADVANCED SCHEDULER [EXTRA CREDIT]
@@ -131,4 +221,3 @@ ticks   A   B   C   A   B   C   to run
 >> disadvantages in your design choices.  If you were to have extra
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
-
