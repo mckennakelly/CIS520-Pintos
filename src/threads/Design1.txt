@@ -44,8 +44,9 @@ First the call disables interupts, then checks to make sure the given value
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
 
-??? (This may be asking about if we implemented a wait_list instead
-	of using the all_list in thread.h)
+The passed function that wakes the sleeping threads only checks if a thread needs
+	to be woken if it is blocked. Therefore not having to check every thread's 
+	sleep_ticks to check if it needs to be woken up, saving time.
 
 ---- SYNCHRONIZATION ----
 
@@ -95,7 +96,10 @@ struct list locks_held;
 		to the blocking thread.
 	Added to struct thread in thread.h.
 
-??? (Need to add the lock blocker to implement nested priority donation)
+struct thread *blocker;
+	Thread holding the lock currently blocking this thread used to do 
+		nested donation.
+	Added to struct thread in thread.h.
 
 >> B2: Explain the data structure used to track priority donation.
 
@@ -129,14 +133,11 @@ When a thread attempts to acquire a lock and it finds that another thread
 	thread's donated_priority to the original thread's priority. Therefore
 	buffing the lock holder's priority.
 
-??? (Need to add description of nested priority donation)
 After a thread dontates its priority to the thread holding the lock it needs,
 	it checks if that lock holding thread is blocked by another thread by checking
-	the lock blocker struct in the thread. If that blocker variable shows that
+	the thread blocker struct in the thread. If that blocker variable shows that
 	the second thread is also being blocked by a thread holding a lock it needs,
-	the original priority dontates its priority to that thread also. The thread
-	continues doing this, looking at the next thread's blocker and donating its
-	priority if it needs to.
+	the original thread dontates its priority to that thread also.
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
