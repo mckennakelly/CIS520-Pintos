@@ -108,6 +108,7 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 	
 	struct list locks_held;				/* List of locks held by this thread. */
+	struct thread *blocker;				/* Thread holding the lock currently blocking this thread. */
   };
 
 
@@ -150,5 +151,6 @@ int thread_get_load_avg (void);
 void thread_yield_to_higher_priority( void );
 void thread_resort_ready_list( void );
 int thread_get_thread_priority( struct thread * );
+void thread_set_donated_priority( struct thread *t, int priority );
 
 #endif /* threads/thread.h */

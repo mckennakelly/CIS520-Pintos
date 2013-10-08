@@ -485,6 +485,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->donated_priority = PRI_MIN;
   t->magic = THREAD_MAGIC;
+  t->blocker = NULL;
   list_init( &t->locks_held );
   list_push_back (&all_list, &t->allelem);
 }
@@ -593,6 +594,21 @@ thread_get_thread_priority( struct thread *t )
 {
 	return t->donated_priority > t->priority ?
 			t->donated_priority : t->priority;
+}
+
+void
+thread_set_donated_priority( struct thread *t, int priority )
+{
+  if( t!=NULL )
+  {
+    struct lock lock_prior;
+    lock_init( &lock_prior );
+  
+    lock_acquire( &lock_prior );
+    thread_set_donated_priority( t->blocker, priority );
+    t->donated_priority = priority;
+    lock_release( &lock_prior );
+  }
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and

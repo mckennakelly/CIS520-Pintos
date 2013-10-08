@@ -209,7 +209,8 @@ lock_acquire (struct lock *lock)
   
   if( !sema_try_down( &lock->semaphore ) )
   {
-    lock->holder->donated_priority = thread_get_priority();
+    thread_set_donated_priority( lock->holder, thread_get_priority() );
+    thread_current()->blocker = lock->holder;
 	thread_resort_ready_list();
 	sema_down (&lock->semaphore);
   }
