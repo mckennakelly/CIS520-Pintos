@@ -12,6 +12,8 @@ Adam Nickle <anickle@ksu.edu>
 >> If you have any preliminary comments on your submission, notes for
 >> the TA, or extra credit, please give them here.
 
+Did not do the extra credit.
+
 >> Please cite any offline or online sources you consulted while
 >> preparing your submission, other than the Pintos documentation,
 >> course text, lecture notes, and course staff.
@@ -100,6 +102,10 @@ struct thread *blocker;
 	Thread holding the lock currently blocking this thread used to do 
 		nested donation.
 	Added to struct thread in thread.h.
+	
+struct list_elem elem;
+	A list element in each lock used in the locks_held list.
+	Added to struct lock in synch.h.
 
 >> B2: Explain the data structure used to track priority donation.
 
@@ -176,7 +182,7 @@ We initially considered just allowing a thread to donate its priority when it tr
 	acquire a lock and avoid having a list of locks held, but decided that that would not
 	achieve all the goals required.
 
-____DID NOT DO THIS_____________________________________________________________________________
+_________________________________DID NOT DO THIS________________________________________________
 
 
               ADVANCED SCHEDULER [EXTRA CREDIT]
