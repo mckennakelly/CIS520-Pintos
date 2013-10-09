@@ -440,11 +440,11 @@ lock_less( const struct list_elem *a_, const struct list_elem *b_,
   if( list_empty( &s1->waiters ) 
    || list_empty( &s2->waiters ) )
 	return list_empty( &s1->waiters );
-  
+	
   const struct thread *t1 = 
-		_extract_thread( list_front( &s1->waiters ) );
+		_extract_thread( list_max( &s1->waiters, sema_less, NULL ) );
   const struct thread *t2 = 
-		_extract_thread( list_front( &s2->waiters ) );
+		_extract_thread( list_max( &s2->waiters, sema_less, NULL ) );
   
   return thread_get_thread_priority( t1 ) < thread_get_thread_priority( t2 );
 }

@@ -607,6 +607,7 @@ thread_set_donated_priority( struct thread *t, int priority )
     lock_acquire( &lock_prior );
     thread_set_donated_priority( t->blocker, priority );
     t->donated_priority = priority;
+    thread_resort_ready_list();
     lock_release( &lock_prior );
   }
 }
