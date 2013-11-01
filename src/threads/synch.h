@@ -4,11 +4,6 @@
 #include <list.h>
 #include <stdbool.h>
 
-#define _extract_sema_elem( x ) \
-		( list_entry( x, struct semaphore_elem, elem ) )
-#define _extract_lock( x ) \
-		( list_entry( x, struct lock, elem ) )
-
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -27,7 +22,6 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
-	struct list_elem elem;		/* List elem. */
   };
 
 void lock_init (struct lock *);
