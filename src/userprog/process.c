@@ -152,14 +152,14 @@ process_exit (void)
 
   /* Close executable (and allow writes). */
   file_close (cur->bin_file);
-
+  printf ("%s: exit(%d)\n", cur->name, cur->wait_status->exit_code);
   /* Notify parent that we're dead. */
   if (cur->wait_status != NULL) 
     {
       struct wait_status *cs = cur->wait_status;
 
       /* add code */
-      printf ("%s: exit(%d)\n", cur->name, cur->wait_status->exit_code);
+      
 
       release_child (cs);
     }

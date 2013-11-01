@@ -180,8 +180,8 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-/* Add code */
-  thread_exit ();
+  if (!ufile) return -1;
+    return process_execute(ufile);
 }
  
 /* Wait system call. */
@@ -196,14 +196,24 @@ sys_wait (tid_t child)
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  return 0;
+  if (!ufile && is_user_vaddr(ufile))
+  {
+    bool was_created = filesys_create(ufile, initial_size);
+	if (was_created) return 0;
+  }
+  return -1;
 }
  
 /* Remove system call. */
 static int
 sys_remove (const char *ufile) 
 {
-/* Add code */
+  if (!ufile && is_user_vaddr(ufile))
+  {
+    bool was_removed = filesys_remove(ufile);
+	if (was_removed) return 0;
+  }
+  return -1;
 }
  
 /* A file descriptor, for binding a file handle to a file. */
@@ -248,24 +258,41 @@ sys_open (const char *ufile)
 static struct file_descriptor *
 lookup_fd (int handle)
 {
-/* Add code to lookup file descriptor in the current thread's fds */
-  thread_exit ();
+  /* Add code to lookup file descriptor in the current thread's fds */
+  struct list_elem *f;
+  struct list file_list = thread_current ()->fds;
+  for (f = list_begin (&file_list); f != list_end (&file_list); f = list_next (f))
+  {
+    struct file_descriptor *fd = list_entry (f, struct file_descriptor, elem);
+    if (fd->handle == handle) return fd;
+  }
+  return NULL;
 }
  
 /* Filesize system call. */
 static int
 sys_filesize (int handle) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd(handle);
+  if (fd != NULL)
+  {
+    struct file *f= fd->file;
+	return file_length (f);
+  }
+  return -1;
 }
  
 /* Read system call. */
 static int
 sys_read (int handle, void *udst_, unsigned size) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+  if (fd != NULL)
+  {
+    struct file *f = fd->file;
+    return file_read (f, udst_, size);
+  }
+  return -1;
 }
  
 /* Write system call. */
@@ -328,24 +355,37 @@ sys_write (int handle, void *usrc_, unsigned size)
 static int
 sys_seek (int handle, unsigned position) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+  if (!fd)
+  {
+    struct file *f = fd->file;
+	file_seek (f, position);
+  }
 }
  
 /* Tell system call. */
 static int
 sys_tell (int handle) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+  if (fd != NULL)
+  {
+    struct file *f = fd->file;
+	return file_tell (f);
+  }
+  return -1;
 }
  
 /* Close system call. */
 static int
 sys_close (int handle) 
 {
-/* Add code */
-  thread_exit ();
+  struct file_descriptor *fd = lookup_fd (handle);
+  if (fd != NULL)
+  {
+    struct file *f = fd->file;
+	file_close (f);
+  }
 }
  
 /* On thread exit, close all open files. */
