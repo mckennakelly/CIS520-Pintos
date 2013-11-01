@@ -78,7 +78,7 @@ syscall_handler( struct intr_frame *f )
   int *args;
   
   args = f->esp;
-  if(!is_user_vaddr(args) || *args < 0)
+  if( !is_user_vaddr(args) || *args < 0)
 	sys_exit(-1);
   sc = syscall_table + *args;
   f->eax = sc->func(args[1], args[2], args[3]);
@@ -172,6 +172,7 @@ static int
 sys_exit (int exit_code) 
 {
   thread_current ()->wait_status->exit_code = exit_code;
+  printf ("%s: exit(%d)\n", thread_current()->name, thread_current()->wait_status->exit_code);
   thread_exit();
   return( exit_code );
 }
@@ -180,8 +181,9 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-  if (!ufile) return -1;
+  if( ufile != NULL ) 
     return process_execute(ufile);
+  return -1;
 }
  
 /* Wait system call. */
@@ -196,7 +198,7 @@ sys_wait (tid_t child)
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  if (!ufile && is_user_vaddr(ufile))
+  if( ufile != NULL && is_user_vaddr(ufile))
   {
     bool was_created = filesys_create(ufile, initial_size);
 	if (was_created) return 0;
@@ -208,7 +210,7 @@ sys_create (const char *ufile, unsigned initial_size)
 static int
 sys_remove (const char *ufile) 
 {
-  if (!ufile && is_user_vaddr(ufile))
+  if( ufile != NULL && is_user_vaddr(ufile))
   {
     bool was_removed = filesys_remove(ufile);
 	if (was_removed) return 0;
