@@ -198,11 +198,9 @@ sys_wait (tid_t child)
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  if( ufile != NULL && is_user_vaddr(ufile))
-  {
-    bool was_created = filesys_create(ufile, initial_size);
-	if (was_created) return 0;
-  }
+  if( ufile != NULL && is_user_vaddr(ufile)
+   && filesys_create(ufile, initial_size) )
+	  return 0;
   return -1;
 }
  
@@ -210,11 +208,9 @@ sys_create (const char *ufile, unsigned initial_size)
 static int
 sys_remove (const char *ufile) 
 {
-  if( ufile != NULL && is_user_vaddr(ufile))
-  {
-    bool was_removed = filesys_remove(ufile);
-	if (was_removed) return 0;
-  }
+  if( ufile != NULL && is_user_vaddr(ufile)
+   && filesys_remove(ufile) )
+	  return 0;
   return -1;
 }
  
