@@ -193,9 +193,14 @@ sys_exit (int exit_code)
 static int
 sys_exec (const char *ufile) 
 {
-  if( ufile != NULL ) 
-    return process_execute(ufile);
-  return -1;
+  int ret = -1;
+  if( ufile != NULL )
+  {
+    lock_acquire( &fs_lock);
+    ret = process_execute(ufile);
+	lock_release (&fs_lock);
+  }
+  return ret;
 }
  
 /* Wait system call. */

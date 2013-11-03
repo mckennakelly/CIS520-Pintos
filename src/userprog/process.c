@@ -46,7 +46,8 @@ process_execute (const char *file_name)
   tid_t tid;
 
   /* Initialize exec_info. */
-  exec.file_name = file_name;
+  exec.file_name = (char*)malloc((strlen(file_name)+1)*sizeof(char));
+  strlcpy(exec.file_name, file_name, strlen(file_name)+1);
   sema_init (&exec.load_done, 0);
 
   /* Create a new thread to execute FILE_NAME. */
