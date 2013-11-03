@@ -139,7 +139,29 @@ release_child (struct wait_status *cs)
 int
 process_wait (tid_t child_tid) 
 {
-  return -1;
+  /*Find child in list of children */
+  struct list_elem* e;
+  struct thread* cur = thread_current();
+  
+  struct wait_status *cs;
+  bool found = 0;
+  
+  /* invalid tid */
+  if( child_tid == TID_ERROR ) return -1;
+  
+  for( e = list_begin(&thread_current()->children); e != list_end (&thread_current()->children);
+       e = e->next)
+  {
+    cs = list_entry( e, struct wait_status, elem );
+	if( cs->tid == child_tid ) found = 1;
+  }
+  
+  /* tid not a child of the calling process */
+  if( !found ) return -1;
+  
+  /* wait until child finishes */
+  sema_down( &cs->dead );
+  return cs->exit_code;
 }
 
 /* Free the current process's resources. */
@@ -157,9 +179,7 @@ process_exit (void)
   if (cur->wait_status != NULL) 
     {
       struct wait_status *cs = cur->wait_status;
-      /* add code */
-      
-
+      sema_up( &cs->dead );
       release_child (cs);
     }
 
