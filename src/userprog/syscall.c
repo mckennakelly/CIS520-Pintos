@@ -75,21 +75,31 @@ static void
 syscall_handler( struct intr_frame *f )
 {
   const struct syscall *sc;
-  int *args;
+  unsigned call_nr;
+  int args[3];
 
-  args = f->esp;
-  if( !is_user_vaddr(args) || *args < 0)
-       sys_exit(-1);
-  sc = syscall_table + *args;
-  f->eax = sc->func(args[1], args[2], args[3]);
+  /* Get the system call. */
+  copy_in( &call_nr, f->esp, sizeof call_nr );
+  if( call_nr >= sizeof syscall_table /sizeof *syscall_table )
+    sys_exit(-1);
+  sc = syscall_table + call_nr;
+  
+  /* Get the system call arguments. */
+  ASSERT (sc->arg_cnt <= sizeof args / sizeof *args );
+  memset( args, 0, sizeof args );
+  copy_in( args, (uint32_t*) f->esp+1, sizeof *args * sc->arg_cnt );
+  
+  /* Execute the system call, and set the return value. */
+  f->eax = sc->func( args[0], args[1], args[2] );
 }
 
 /* Returns true if UADDR is a valid, mapped user address,
    false otherwise. */
 static bool
 verify_user (const void *uaddr) 
-{
-  return (uaddr < PHYS_BASE
+{ 
+  if (uaddr != NULL )
+    return (uaddr < PHYS_BASE
           && pagedir_get_page (thread_current ()->pagedir, uaddr) != NULL);
 }
  
@@ -99,6 +109,8 @@ verify_user (const void *uaddr)
 static inline bool
 get_user (uint8_t *dst, const uint8_t *usrc)
 {
+  if( !verify_user( (void*)usrc ) ) return 0;
+  
   int eax;
   asm ("movl $1f, %%eax; movb %2, %%al; movb %%al, %0; 1:"
        : "=m" (*dst), "=&a" (eax) : "m" (*usrc));
@@ -125,10 +137,10 @@ copy_in (void *dst_, const void *usrc_, size_t size)
 {
   uint8_t *dst = dst_;
   const uint8_t *usrc = usrc_;
- 
+
   for (; size > 0; size--, dst++, usrc++) 
-    if (usrc >= (uint8_t *) PHYS_BASE || !get_user (dst, usrc)) 
-      thread_exit ();
+    if (usrc >= (uint8_t *) PHYS_BASE || !get_user (dst, usrc))
+      sys_exit(-1);
 }
  
 /* Creates a copy of user string US in kernel memory
@@ -144,14 +156,14 @@ copy_in_string (const char *us)
  
   ks = palloc_get_page (0);
   if (ks == NULL)
-    thread_exit ();
- 
+    sys_exit(-1);
+  
   for (length = 0; length < PGSIZE; length++)
     {
       if (us >= (char *) PHYS_BASE || !get_user (ks + length, us++)) 
         {
           palloc_free_page (ks);
-          thread_exit (); 
+          sys_exit(-1); 
         }
       if (ks[length] == '\0')
         return ks;
@@ -197,7 +209,7 @@ sys_wait (tid_t child)
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  if( ufile != NULL && is_user_vaddr(ufile)
+  if( ufile != NULL && verify_user(ufile)
    && filesys_create(ufile, initial_size) )
 	  return 1;
   return 0;
@@ -228,9 +240,9 @@ sys_open (const char *ufile)
   char *kfile = copy_in_string (ufile);
   struct file_descriptor *fd;
   int handle = -1;
- 
+   
   fd = malloc (sizeof *fd);
-  if (fd != NULL)
+  if (fd != NULL && ufile!=NULL)
     {
       lock_acquire (&fs_lock);
       fd->file = filesys_open (kfile);
@@ -258,10 +270,13 @@ lookup_fd (int handle)
   /* Add code to lookup file descriptor in the current thread's fds */
   struct list_elem *f;
   struct list file_list = thread_current ()->fds;
-  for (f = list_begin (&file_list); f != list_end (&file_list); f = list_next (f))
+  
+  if( handle == STDOUT_FILENO || handle == STDIN_FILENO ) return NULL;
+  
+  for (f = list_begin (&file_list); f != list_end (&file_list); f = f->next)
   {
     struct file_descriptor *fd = list_entry (f, struct file_descriptor, elem);
-    if (fd->handle == handle) return fd;
+	if( fd != NULL && fd->handle == handle ) return fd;
   }
   return NULL;
 }
@@ -300,6 +315,8 @@ sys_write (int handle, void *usrc_, unsigned size)
   struct file_descriptor *fd = NULL;
   int bytes_written = 0;
   
+  if( handle == STDIN_FILENO )
+    return -1;
   /* Lookup up file descriptor. */
   if (handle != STDOUT_FILENO)
     fd = lookup_fd (handle);
@@ -315,13 +332,12 @@ sys_write (int handle, void *usrc_, unsigned size)
       if (!verify_user (usrc)) 
         {
           lock_release (&fs_lock);
-          thread_exit ();
+          sys_exit(-1);
         }
 
       /* Do the write. */
       if (handle == STDOUT_FILENO)
         {
-		  
           putbuf (usrc, write_amt);
           retval = write_amt;
         }
@@ -381,6 +397,7 @@ sys_close (int handle)
   if (fd != NULL)
   {
     struct file *f = fd->file;
+	list_remove( &fd->elem );
 	file_close (f);
 	free( fd );
   }
