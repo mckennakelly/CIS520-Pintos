@@ -76,10 +76,10 @@ syscall_handler( struct intr_frame *f )
 {
   const struct syscall *sc;
   int *args;
-  
+
   args = f->esp;
   if( !is_user_vaddr(args) || *args < 0)
-	sys_exit(-1);
+       sys_exit(-1);
   sc = syscall_table + *args;
   f->eax = sc->func(args[1], args[2], args[3]);
 }
@@ -190,8 +190,7 @@ sys_exec (const char *ufile)
 static int
 sys_wait (tid_t child) 
 {
-/* Add code */
-  thread_exit ();
+  return process_wait( child );
 }
  
 /* Create system call. */
@@ -200,8 +199,8 @@ sys_create (const char *ufile, unsigned initial_size)
 {
   if( ufile != NULL && is_user_vaddr(ufile)
    && filesys_create(ufile, initial_size) )
-	  return 0;
-  return -1;
+	  return 1;
+  return 0;
 }
  
 /* Remove system call. */
@@ -210,8 +209,8 @@ sys_remove (const char *ufile)
 {
   if( ufile != NULL && is_user_vaddr(ufile)
    && filesys_remove(ufile) )
-	  return 0;
-  return -1;
+	  return 1;
+  return 0;
 }
  
 /* A file descriptor, for binding a file handle to a file. */
@@ -300,11 +299,10 @@ sys_write (int handle, void *usrc_, unsigned size)
   uint8_t *usrc = usrc_;
   struct file_descriptor *fd = NULL;
   int bytes_written = 0;
-
+  
   /* Lookup up file descriptor. */
   if (handle != STDOUT_FILENO)
     fd = lookup_fd (handle);
-
   lock_acquire (&fs_lock);
   while (size > 0) 
     {
@@ -323,6 +321,7 @@ sys_write (int handle, void *usrc_, unsigned size)
       /* Do the write. */
       if (handle == STDOUT_FILENO)
         {
+		  
           putbuf (usrc, write_amt);
           retval = write_amt;
         }
@@ -383,6 +382,7 @@ sys_close (int handle)
   {
     struct file *f = fd->file;
 	file_close (f);
+	free( fd );
   }
 }
  
@@ -397,5 +397,7 @@ syscall_exit (void)
     struct file_descriptor *fd = list_entry (f, struct file_descriptor, elem);
     struct file *f_ptr = fd->file;
 	file_close (f_ptr);
+	free( fd );
   }
+  printf ("%s: exit(%d)\n", thread_current()->name, thread_current()->wait_status->exit_code);
 }
