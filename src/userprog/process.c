@@ -143,7 +143,7 @@ process_wait (tid_t child_tid)
   /*Find child in list of children */
   struct list_elem* e;
   struct thread* cur = thread_current();
-  
+  int ret;
   struct wait_status *cs;
   bool found = 0;
   
@@ -154,15 +154,25 @@ process_wait (tid_t child_tid)
        e = e->next)
   {
     cs = list_entry( e, struct wait_status, elem );
-	if( cs->tid == child_tid ) found = 1;
+	if( cs->tid == child_tid )
+	{
+		found = 1;
+		break;
+	}
   }
   
   /* tid not a child of the calling process */
   if( !found ) return -1;
-  
+  if(cs->exit_code==-123456)
+	return -1;
   /* wait until child finishes */
   sema_down( &cs->dead );
-  return cs->exit_code;
+  ret = cs->exit_code;
+  struct thread *t = get_thread_by_tid (child_tid);
+  while (t->status == THREAD_BLOCKED)
+    thread_unblock (t);
+  cs->exit_code = -123456;
+  return ret;
 }
 
 /* Free the current process's resources. */

@@ -303,13 +303,16 @@ sys_filesize (int handle)
 static int
 sys_read (int handle, void *udst_, unsigned size) 
 {
+  int ret = -1;
   struct file_descriptor *fd = lookup_fd (handle);
   if (fd != NULL)
   {
+    lock_acquire (&fs_lock);
     struct file *f = fd->file;
-    return file_read (f, udst_, size);
+    ret = file_read (f, udst_, size);
+    lock_release (&fs_lock);
   }
-  return -1;
+  return ret;
 }
  
 /* Write system call. */
@@ -399,27 +402,29 @@ static int
 sys_close (int handle) 
 {
   struct file_descriptor *fd = lookup_fd (handle);
-  if (fd != NULL)
+  int ret = -1;
+  if (fd != NULL && handle != STDOUT_FILENO && handle != STDIN_FILENO)
   {
+    lock_acquire (&fs_lock);
     struct file *f = fd->file;
-	list_remove( &fd->elem );
-	file_close (f);
-	free( fd );
+    list_remove( &fd->elem );
+    file_close (f);
+    free( fd );
+    lock_release (&fs_lock);
+    ret = 0;
   }
+  return ret;
 }
  
 /* On thread exit, close all open files. */
 void
 syscall_exit (void) 
 {
-  struct list_elem *f;
-  struct list file_list = thread_current ()->fds;
-  for (f = list_begin (&file_list); f != list_end (&file_list); f = list_next (f))
+  while (!list_empty (&thread_current ()->fds))
   {
-    struct file_descriptor *fd = list_entry (f, struct file_descriptor, elem);
-    struct file *f_ptr = fd->file;
-	file_close (f_ptr);
-	free( fd );
+    struct file_descriptor *fd = list_entry (list_begin (&thread_current ()->fds),
+						struct file_descriptor, elem);
+    sys_close (fd->handle);
   }
-  printf ("%s: exit(%d)\n", thread_current()->name, thread_current()->wait_status->exit_code);
+  //printf ("%s: exit(%d)\n", thread_current()->name, thread_current()->wait_status->exit_code);
 }
