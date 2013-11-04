@@ -194,7 +194,7 @@ static int
 sys_exec (const char *ufile) 
 {
   int ret = -1;
-  if( ufile != NULL )
+  if( ufile != NULL && verify_user( (void*)ufile ))
   {
     lock_acquire( &fs_lock);
     ret = process_execute(ufile);
@@ -214,9 +214,9 @@ sys_wait (tid_t child)
 static int
 sys_create (const char *ufile, unsigned initial_size) 
 {
-  if( ufile != NULL && verify_user(ufile)
-   && filesys_create(ufile, initial_size) )
-    return 1;
+  if( !verify_user( (void*)ufile) )sys_exit(-1);
+  else if( ufile != NULL )
+    if( *ufile && filesys_create(ufile, initial_size) ) return 1;
   return 0;
 }
  
@@ -224,9 +224,9 @@ sys_create (const char *ufile, unsigned initial_size)
 static int
 sys_remove (const char *ufile) 
 {
-  if( ufile != NULL && is_user_vaddr(ufile)
-   && filesys_remove(ufile) )
-	  return 1;
+  if( !verify_user( (void*)ufile ))sys_exit(-1);
+  else if( ufile != NULL )
+	if( *ufile && filesys_remove(ufile) ) return 1;
   return 0;
 }
  
@@ -241,7 +241,9 @@ struct file_descriptor
 /* Open system call. */
 static int
 sys_open (const char *ufile) 
-{
+{ 
+  if( !ufile ) sys_exit(-1);
+  
   char *kfile = copy_in_string (ufile);
   struct file_descriptor *fd;
   int handle = -1;
@@ -306,6 +308,9 @@ static int
 sys_read (int handle, void *udst_, unsigned size) 
 {
   int ret = -1;
+  
+  if( !verify_user( udst_) ) return sys_exit( -1 );
+  
   struct file_descriptor *fd = lookup_fd (handle);
   if (fd != NULL)
   {
