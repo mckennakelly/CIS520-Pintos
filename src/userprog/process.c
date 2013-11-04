@@ -48,6 +48,7 @@ process_execute (const char *file_name)
   /* Initialize exec_info. */
   exec.file_name = (char*)malloc((strlen(file_name)+1)*sizeof(char));
   strlcpy(exec.file_name, file_name, strlen(file_name)+1);
+
   sema_init (&exec.load_done, 0);
 
   /* Create a new thread to execute FILE_NAME. */
@@ -131,6 +132,8 @@ release_child (struct wait_status *cs)
     free (cs);
 }
 
+#define TEMP_INVALID_TID -2
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -163,15 +166,15 @@ process_wait (tid_t child_tid)
   
   /* tid not a child of the calling process */
   if( !found ) return -1;
-  if(cs->exit_code==-123456)
-	return -1;
+  if(cs->exit_code == TEMP_INVALID_TID)
+    return -1;
   /* wait until child finishes */
   sema_down( &cs->dead );
   ret = cs->exit_code;
   struct thread *t = get_thread_by_tid (child_tid);
   while (t->status == THREAD_BLOCKED)
     thread_unblock (t);
-  cs->exit_code = -123456;
+  cs->exit_code = TEMP_INVALID_TID;
   return ret;
 }
 
