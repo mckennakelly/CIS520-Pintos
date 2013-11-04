@@ -198,7 +198,7 @@ sys_exec (const char *ufile)
   {
     lock_acquire( &fs_lock);
     ret = process_execute(ufile);
-	lock_release (&fs_lock);
+    lock_release (&fs_lock);
   }
   return ret;
 }
@@ -216,7 +216,7 @@ sys_create (const char *ufile, unsigned initial_size)
 {
   if( ufile != NULL && verify_user(ufile)
    && filesys_create(ufile, initial_size) )
-	  return 1;
+    return 1;
   return 0;
 }
  
@@ -275,15 +275,17 @@ lookup_fd (int handle)
   /* Add code to lookup file descriptor in the current thread's fds */
   struct list_elem *f;
   struct list file_list = thread_current ()->fds;
-  
-  if( handle == STDOUT_FILENO || handle == STDIN_FILENO ) return NULL;
+
+  if( handle == STDOUT_FILENO || handle == STDIN_FILENO
+	|| handle > thread_current ()->next_handle || handle < 1)
+    sys_exit(-1);
   
   for (f = list_begin (&file_list); f != list_end (&file_list); f = f->next)
   {
     struct file_descriptor *fd = list_entry (f, struct file_descriptor, elem);
 	if( fd != NULL && fd->handle == handle ) return fd;
   }
-  return NULL;
+  sys_exit(-1);
 }
  
 /* Filesize system call. */
@@ -327,7 +329,11 @@ sys_write (int handle, void *usrc_, unsigned size)
     return -1;
   /* Lookup up file descriptor. */
   if (handle != STDOUT_FILENO)
+  {
     fd = lookup_fd (handle);
+    if (fd == NULL)
+      return -1;
+  }
   lock_acquire (&fs_lock);
   while (size > 0) 
     {
@@ -426,5 +432,4 @@ syscall_exit (void)
 						struct file_descriptor, elem);
     sys_close (fd->handle);
   }
-  //printf ("%s: exit(%d)\n", thread_current()->name, thread_current()->wait_status->exit_code);
 }
