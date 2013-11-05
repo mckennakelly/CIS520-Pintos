@@ -166,14 +166,17 @@ process_wait (tid_t child_tid)
   
   /* tid not a child of the calling process */
   if( !found ) return -1;
+  /* wait has already been called on child process */
   if(cs->exit_code == TEMP_INVALID_TID)
     return -1;
+
+  /* check if child has already exited */
+  if( cs->ref_cnt < 2 ) 
+    return cs->exit_code;
+
   /* wait until child finishes */
   sema_down( &cs->dead );
   ret = cs->exit_code;
-  struct thread *t = get_thread_by_tid (child_tid);
-  while (t->status == THREAD_BLOCKED)
-    thread_unblock (t);
   cs->exit_code = TEMP_INVALID_TID;
   return ret;
 }

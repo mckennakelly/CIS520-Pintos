@@ -1,5 +1,5 @@
 		           +--------------------------+
-       	           |         CIS 520          |
+       	          	   |         CIS 520          |
 		           | PROJECT 2: USER PROGRAMS |
 		           |     DESIGN DOCUMENT      |
 		           +--------------------------+
@@ -29,19 +29,41 @@ Adam Nickle
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+	None
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+	Argument parsing was already implemented using strtok_r(); all that 
+   needed to be done was a function to reorganize the arguments so that they 
+   are in the correct order. To do this, there is a function that reverses the 
+   arguments.
+
+	When the command line arguments are copied, their length is checked 
+   to verify that they won't overflow the stack page.
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
 
+	strtok_r() is thread safe whereas strtok() isn't.
+
 >> A4: In Pintos, the kernel separates commands into an executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
+
+	In a Unix-like system, you would be able to verify the validity of 
+   arguments before reaching the kernel. Pintos has to copy the arguments into
+   the kernel, tokenize them, and then verify their validity. The Unix-like
+   system simplifies this process because you can reject the arguments and never
+   copy them into the kernel at all.
+
+	Similarly, the unix-like system allows other options to be implemented
+   outside of the kernel. In Pintos, adding command-line options would require
+   kernel changes, which would be significantly more complicated.
 
 			     SYSTEM CALLS
 			     ============
@@ -68,16 +90,33 @@ Adam Nickle
 	  {1, (void *) sys_tell},
 	  {1, (void *) sys_close}
 	};
-		The syscall_table is used to call the correct system call
-		from syscall_handler.
+   The syscall_table is used to enumerate the functions that handle each system call.
+
+	
+static struct syscall 
+        
+{ 
+  
+          size_t arg_cnt;  /* Number of arguments. */ 
+  
+          f_ptr *func;      /* Implementation. */
+        }; 
+   Tracks the number of arguments a system call handler takes. 
+   Used in the system call table, above.
+
+	typedef int (f_ptr)(uint32_t,uint32_t, uint32_t);
+   Casts each system call handler to a function that takes 3 arguments. 
+   Used in the above 2 structures.
 
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
 
-	File descriptors contain the file that the file descriptor is
-		associated with and the file's handler. File descriptor's
-		are unique within a single process.
+	File descriptors contain the handles to associated files, as well as
+   a pointer to the associated file itself. The file descriptors themselves are
+   used to ensure that users are attempting to access valid handles, as opposed to
+   having users directly manipulating handles to files.
+	File descriptors are unique within a single process.
 
 ---- ALGORITHMS ----
 
@@ -85,9 +124,12 @@ Adam Nickle
 >> kernel.
 
 	Our code for reading and writing user data takes advantage of the
-		file implementation in file.c. Our system calls call the file
-		operation function appropriate for the call such as open, read,
-		or write.
+   file implementation in file.c. Our system calls call the file operation function 
+   appropriate for the call such as open, read, or write.
+
+	The read/write also verifies the buffer pointers and file descriptor handles
+   so that users aren't allowed to use bad pointers or read from STDOUT or write to
+   STDIN.
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -96,16 +138,23 @@ Adam Nickle
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
-???
+	Both situations will require at least 1 page table inpsection and at most 2.
+   At best, it will only take 1 page table inspection (if all of the data fits in a
+   single page), but it will take 2 if the data must span 2 pages. The only way to guarantee
+   that you only have to inpsect 1 page is if you put all data on a new page. This would
+   be very inefficient and silly, though, so the "improvement" would not actually improve anything.
 
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
 
 	The wait system call uses the process_wait in process.c.
-		process_wait finds the process with with the given child_tid.
-		Then waits until that process ends, by waiting to be able to
-		down the 'dead' semaphore that is upped in process_exit when
-		the process ends.
+   process_wait verifies that the process ID is valid and a child of the calling
+   process. If not, it immediately returns an error code. Otherwise, it finds the process 
+   with with the given child_tid and checks if the calling process has already waited on it.
+   If it has, it returns immediately with an error code. If the child process has already exited, it
+   returns its exit code. Otherwise, it waits until the child exits (by waiting to be able to down
+   the 'dead' semaphore that is upped in process_exit when the child ends) and then returns the subsequent
+   exit code.
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -121,13 +170,19 @@ Adam Nickle
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
-	In our code, we attempted to always imploy guard error checking,
-		so that all our error checks would be easily discernable with
-		the actual implemetation.
-	We made sure that when an error arose, that we didn't exit the process
-		or return before the appropriate resources were released.
-	In the case of a bad write, the fs_lock is always released even if
-		the write is bad.
+	Many errors that aren't directly related to system calls are handled in
+   exception.c. We allow the process to page fault and then, depending on how it faulted,
+   we kill the thread with an error code.
+
+	Some errors are handled within the system calls. Out of bound memory access,
+   bad file handles, and attempting to read/write to reserved file descriptors (e.g. writing to
+   STDIN) are examples of such exceptions. In these cases, the exceptions are specific to the 
+   system call, or so simple (verify the address of a pointer is valid) that it isn't distracting 
+   to have the additional 1-2 lines of protective code in the handler itself.
+
+	In any case, if an exception occurs, sys_exit() is called with an error code.
+   sys_exit() indirectly calls a function that closes open file descriptors associated with
+   the process and subsequent locks are released.
 
 ---- SYNCHRONIZATION ----
 
@@ -136,8 +191,15 @@ Adam Nickle
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
 
-	It uses a semaphore to ensure synchronization while the executable is
-		loading and if it fails to load it will return tid error to exec.
+	It uses a semaphore to ensure synchronization while the executable is loading.
+   If it fails to load at any time, it will set a flag in the executable to indicate that it
+   failed loading. This will indicate that exec should return tid error (-1). Otherwise, after 
+   the load has completed, it will return the threads ID.
+
+	The success/failure status is returned like every other system call: in the eax
+   register and the success flag is still set to false within the executable, indicating
+   that an error occurred.
+   
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -146,25 +208,45 @@ Adam Nickle
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
-	A parent process waits on a child process by waiting on the
-		'dead' semaphore of the child. This semaphore is upped only when
-		the process exits and so the parent process must wait until after
-		the child process exits to continue running.
+	When a P waits on C, it checks how many references exist to the child process.
+   If the reference count is less than 2, it means the child process has already exited and
+   the wait system call should just return its exit status. Otherwise, a semaphore is used to
+   ensure that the parent waits (sema_down in process wait) until the child exits (sema_up in
+   release child) and then returns the child's exit code.
+
+	In each case, when a process exits (child or parent), it closes all open files,
+   and checks other associated data structures to see if any references still exist (for
+   instance, if the reference count mentioned above reaches 0, it means both the parent and
+   child referencing the wait_status structure have exited, so the wait_status structure can
+   be released as well). The reference count will ensure that if the parent exits first,
+   the structure will still be freed correctly.
+
+	Many special cases are avoided by having each thread have its own wait_status list; one 
+   for each child process a thread has. This way, if a process exits before some of its children,
+   each child's respective wait_status structure still exists until they exit as well and
+   decrement the reference count again.
 
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
-	Because it was the simplest way that had the least impact to the already
-		provided implementation.
+	A great deal of the project was partially implemented when we began. For the most part,
+   our implementation was just the inclusion of protective code, calling functions to ensure that
+   the user was only accessing valid memory addresses.
 
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
 	The implementation of file_descriptors allows easy association between
-		a file handle and the file itself. This then makes it simple to implement
-		a look up function for a file using the handle.
+   a file handle and the file itself. This then makes it simple to implement
+   a look up function for a file using the handle. Again, most of the implementation was already
+   completed, so our design was meant to conform with existing code.
+
+	If we had started with an empty solution, I probably wouldn't have implemented file
+   descriptor lists. An array of file descriptors seems as if it would have been more
+   straightforward, namely for verifying valid file descriptors (within range, mapping to a file,
+   etc.) as opposed to our implementation which loops over a list of file descriptors.
 
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
@@ -183,12 +265,35 @@ the quarter.
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
+	One system call in particular was frustrating because the code seemed to be
+   implemented already, but it wasn't implemented correctly (sys_exec). After figuring out
+   the problem (a difference of about 2 lines) we got 20% more of the test points, but it took
+   more than a few hours to figure out what was wrong.
+	Some indication that this was the problem (since it was just page faulting) would have
+   been appreciated.
+
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+
+	Implementing the sys_wait was particularly useful. It was the most involved and
+   "difficult" to implement, but the description was detailed and the implementation was
+   fairly straightforward after reading through some of the other code/data structures.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
+
+	The project description doesn't seem to match the project at all.
+   Part of the project is already implemented and has useful "Add code" tags to
+   help us find the places we need to add new features. A lot of this design document is
+   kind of irrelevant, too. A lot of questions cover features that were implemented for us.
+   I don't feel like I defended my design so much as the design someone herded me into.
+	The project description assumes that nothing has been implemented and
+   a lot of time was wasted trying to figure out what actually applied. The function
+   prototypes were different, and many functions needed modificaton that didn't contain
+   add code tags. There needs to be some standardization between the project description
+   and project implementation (one project description for a clean solution and one project
+   description for extending project 1 would help a lot).
 
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?
